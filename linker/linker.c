@@ -183,6 +183,9 @@ static char apkenv___linker_dl_err_buf[768];
 	do {                                                                                  \
 		format_buffer(apkenv___linker_dl_err_buf, sizeof(apkenv___linker_dl_err_buf), \
 			      "%s[%d]: " fmt, __func__, __LINE__, ##x);                       \
+		if (getenv("LINKER_PRINT_ERRORS"))                                             \
+			fprintf(stderr, "dl_err: %s[%d]: " fmt "\n", __func__, __LINE__,   \
+				##x);                                                              \
 		DEBUG("dl_err filled:" fmt "\n", ##x);                                                         \
 	} while (0)
 

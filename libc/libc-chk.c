@@ -160,6 +160,15 @@ size_t bionic___strlen_chk(const char *s, size_t s_len)
 	return ret;
 }
 
+void *bionic___memchr_chk(const void *s, int c, size_t n, size_t s_len)
+{
+	if (__builtin_expect(n > s_len, 0)) {
+		fprintf(stderr, "memchr: prevented read past end of buffer\n");
+		abort();
+	}
+	return memchr(s, c, n);
+}
+
 char *bionic___strchr_chk(const char *p, int ch, size_t s_len)
 {
 	for (;; ++p, s_len--) {

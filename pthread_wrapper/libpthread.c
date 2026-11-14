@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <setjmp.h>
 
 // when __GLIBC__ (or some glibc specific symbol) is not defined, we're assuming musl; can't check to be sure because 🤡
@@ -338,6 +339,17 @@ int bionic_pthread_getattr_np(bionic_pthread_t thread, bionic_attr_t *attr)
 	return pthread_getattr_np((pthread_t)thread, attr->glibc);
 }
 
+pid_t bionic_pthread_gettid_np(bionic_pthread_t thread)
+{
+	/* glibc does not expose another thread's kernel tid.  Callers mostly use
+	 * this for the calling thread (logs and profiler labels); return -1 for
+	 * other threads instead of fabricating a value. */
+	if (pthread_equal((pthread_t)thread, pthread_self())) {
+		return (pid_t)syscall(SYS_gettid);
+	}
+	return (pid_t)-1;
+}
+
 int bionic_pthread_attr_settstack(bionic_attr_t *attr, void *stackaddr, size_t stacksize)
 {
 	assert(attr && IS_MAPPED(attr));
@@ -356,6 +368,15 @@ int bionic_pthread_attr_getstack(const bionic_attr_t *attr, void *stackaddr, siz
 #define BIONIC_PTHREAD_STACK_MIN 8192
 #endif
 
+/*
+ * Native threads that call into the JVM need room for the Java interpreter
+ * and JNI frames.  Mozilla creates its Gecko threads with ~256 KB stacks,
+ * which is enough for C++ but overflows ART's interpreter/protected stack
+ * region as soon as a callback runs a non-trivial Java method.  Raise small
+ * requested stacks to something the Java runtime can use.
+ */
+#define BIONIC_JAVA_STACK_SIZE (2 * 1024 * 1024)
+
 int bionic_pthread_attr_setstacksize(bionic_attr_t *attr, size_t stacksize)
 {
 	assert(attr && IS_MAPPED(attr));
@@ -365,6 +386,9 @@ int bionic_pthread_attr_setstacksize(bionic_attr_t *attr, size_t stacksize)
 
 	if (stacksize < PTHREAD_STACK_MIN)
 		stacksize = PTHREAD_STACK_MIN;
+
+	if (stacksize < BIONIC_JAVA_STACK_SIZE)
+		stacksize = BIONIC_JAVA_STACK_SIZE;
 
 	return pthread_attr_setstacksize(attr->glibc, stacksize);
 }
@@ -414,6 +438,13 @@ int bionic_pthread_attr_getdetachstate(bionic_attr_t *attr, int *detachstate)
 int bionic_pthread_create(bionic_pthread_t *thread, const bionic_attr_t *attr, void* (*start)(void*), void *arg)
 {
 	assert(thread && (!attr || IS_MAPPED(attr)));
+	if (attr) {
+		size_t stack_size = 0;
+		if (pthread_attr_getstacksize(attr->glibc, &stack_size) == 0 &&
+				stack_size < BIONIC_JAVA_STACK_SIZE) {
+			pthread_attr_setstacksize(attr->glibc, BIONIC_JAVA_STACK_SIZE);
+		}
+	}
 	return pthread_create((pthread_t*)thread, (attr ? attr->glibc : NULL), start, arg);
 }
 

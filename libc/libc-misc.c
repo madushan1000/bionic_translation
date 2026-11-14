@@ -73,9 +73,9 @@ char *bionic_getenv(const char *name) {
 		printf("!!! NULL passed to %s\n", __func__);
 	}
 
-	if(!strcmp(name, "HOME"))
-		return NULL;
-
+	/* Android apps use HOME as the app's profile/data home (Firefox sets it
+	 * to Context.getFilesDir() through GeckoLoader).  Returning NULL here made
+	 * Gecko fail with "Could not find profile folder."  */
 	/* no point returning anything else, apps mix this with using hardcoded paths */
 	if(!strcmp(name, "ANDROID_ROOT"))
 		return "/system";
