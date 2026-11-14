@@ -76,9 +76,12 @@ char *bionic_getenv(const char *name) {
 	/* Android apps use HOME as the app's profile/data home (Firefox sets it
 	 * to Context.getFilesDir() through GeckoLoader).  Returning NULL here made
 	 * Gecko fail with "Could not find profile folder."  */
-	/* no point returning anything else, apps mix this with using hardcoded paths */
-	if(!strcmp(name, "ANDROID_ROOT"))
-		return "/system";
+	/* Keep ANDROID_ROOT pointing at the host install tree when the launcher
+	 * provides one; Gecko and fontconfig read system assets from it. */
+	if(!strcmp(name, "ANDROID_ROOT")) {
+		const char* root = getenv(name);
+		return root ? root : "/system";
+	}
 
 	return getenv(name);
 }
