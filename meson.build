@@ -53,7 +53,7 @@ dl_bio = shared_library('dl_bio',
 		dependency('dl'),
 		dependency('egl'),
 		dependency('libelf'),
-		dependency('libunwind', version : '>=1.8.0'), # needed by libc_bio anyway, so might as well use it here
+		dependency('libunwind', version : '>=1.6.2'), # needed by libc_bio anyway, so might as well use it here
 		config,
 	],
 	link_with: [
@@ -166,4 +166,6 @@ install_data(
 	install_dir: get_option('datadir') / 'bionic_translation/cfg.d'
 )
 
-subdir('tests')
+if not meson.is_subproject()
+	subdir('tests')
+endif

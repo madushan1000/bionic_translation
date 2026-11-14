@@ -376,6 +376,21 @@ __attribute__((constructor)) void construct(void)
 	free(cfg_path);
 	read_cfg_dir(&lib_override_map, "/etc/bionic_translation/cfg.d");
 
+	// Droidlet installs its cfg under $PREFIX/share.  PREFIX and ANDROID_ROOT
+	// both point at the install tree in the host launcher.
+	const char *install_roots[] = {getenv("PREFIX"), getenv("ANDROID_ROOT")};
+	for (size_t i = 0; i < sizeof(install_roots) / sizeof(install_roots[0]); i++) {
+		if (!install_roots[i] || !install_roots[i][0])
+			continue;
+		char *path = malloc(strlen(install_roots[i]) + sizeof("/share/bionic_translation/cfg.d"));
+		if (!path)
+			continue;
+		strcpy(path, install_roots[i]);
+		strcat(path, "/share/bionic_translation/cfg.d");
+		read_cfg_dir(&lib_override_map, path);
+		free(path);
+	}
+
 
 	// since it seems to not be particularly trivial to figure out which
 	// libs we should link ourselves and which libs we should leave to glibc,

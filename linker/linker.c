@@ -1654,6 +1654,8 @@ unsigned int apkenv_unload_library(soinfo *si)
 // NOTE: `;#` serves as a hack to comment out section parameters which would otherwise cause a conflict
 // NOTE: alignment to PAGE_SIZE is used to fix an issue where aarch64 used `adrp` and gets an incorrect address in the new location
 
+#if !defined(__clang__)
+
 #define FUNC_ADJ_VAR(func_name) (func_name##_adj_data)
 
 #define COPYABLE_FUNC(func_name)                                                                                                                                                            \
@@ -1707,6 +1709,8 @@ COPYABLE_FUNC(symbol_not_linked_stub)
 	adj_data->print_missing_func_and_exit(adj_data->orig_func_name);
 }
 
+#endif  // !__clang__
+
 /* FIXME: figure out how to put this in dlfcn.h */
 int bionic_dladdr(const void *addr, Dl_info *info);
 
@@ -1721,7 +1725,9 @@ void print_backtrace()
 	printf("simple backtrace:\n");
 
 	/* unwind info is in ELF sections, so we need to make sure libunwind knows about the elf files loaded by our linker */
+#if UNW_VERSION >= UNW_VERSION_CODE(1, 8)
 	unw_set_iterate_phdr_function(unw_local_addr_space, &bionic_dl_iterate_phdr);
+#endif
 
 	do {
 		unw_word_t offset, pc;
@@ -1770,12 +1776,21 @@ void backtrace_stub_func()
 	exit(1);
 }
 
+#if defined(__clang__)
+/* The copyable-function stub relies on GCC section-attribute syntax.  Clang
+ * writes the flags into the section name, so use the ordinary backtrace stub
+ * instead when this project is built with clang. */
+static ElfW(Addr) prepare_stub_func(const char*) {
+	return (ElfW(Addr))&backtrace_stub_func;
+}
+#else
 static ElfW(Addr) prepare_stub_func(const char* sym_name) {
 	struct stub_func_adj_data *data = malloc(sizeof(struct stub_func_adj_data));
 	data->print_missing_func_and_exit = &print_missing_func_and_exit;
 	data->orig_func_name = sym_name;
 	return (intptr_t)make_copy_of_function(symbol_not_linked_stub, data);
 }
+#endif
 
 #ifdef USE_RELA
 #define REL_TYPE ElfW(Rela)
@@ -1829,7 +1844,8 @@ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
 				if (strstr(sym_name, "pthread_"))
 					fprintf(stderr, "symbol may need to be wrapped: %s\n", sym_name);
 				LINKER_DEBUG_PRINTF("%s hooked symbol %s to %p\n", si->name, sym_name, (void *)sym_addr);
-			} else if (!sym_addr && !strncmp(sym_name, "gl", 2)) {
+			} else if (!sym_addr &&
+			           (!strncmp(sym_name, "gl", 2) || !strncmp(sym_name, "egl", 3))) {
 				LINKER_DEBUG_PRINTF("=======================================\n");
 				LINKER_DEBUG_PRINTF("%s symbol %s is an OpenGL extension?\n", si->name, sym_name);
 				if ((sym_addr = (uintptr_t)eglGetProcAddress(sym_name)))
