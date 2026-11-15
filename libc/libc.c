@@ -1,4 +1,5 @@
 #include "../wrapper/verbose.h"
+#include "libc-bio-paths.h"
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
@@ -154,7 +155,9 @@ int bionic_stat(const char *restrict path, struct bionic_stat *restrict buf)
 	verbose("%s", path);
 	struct stat native_stat;
 
-	int ret = stat(path, &native_stat);
+	char *translated = libc_bio_translate_path(path);
+	int ret = stat(translated ? translated : path, &native_stat);
+	free(translated);
 	*buf = (struct bionic_stat) {
 		.st_dev = native_stat.st_dev,
 		.st_ino = native_stat.st_ino,
@@ -178,14 +181,23 @@ int bionic_stat(const char *restrict path, struct bionic_stat *restrict buf)
 int bionic_stat(const char *restrict path, struct stat *restrict buf)
 {
 	verbose("%s", path);
-	return stat(path, buf);
+	if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+		fprintf(stderr, "bionic_stat: %s\n", path);
+	}
+	char *translated = libc_bio_translate_path(path);
+	int ret = stat(translated ? translated : path, buf);
+	free(translated);
+	return ret;
 }
 #endif
 
 int bionic_lstat(const char *restrict path, struct stat *restrict buf)
 {
 	verbose("%s", path);
-	return lstat(path, buf);
+	char *translated = libc_bio_translate_path(path);
+	int ret = lstat(translated ? translated : path, buf);
+	free(translated);
+	return ret;
 }
 
 int bionic_fstat(int fd, struct stat *buf)
@@ -197,7 +209,13 @@ int bionic_fstat(int fd, struct stat *buf)
 int bionic_fstatat(int dirfd, const char *pathname, void *buf, int flags)
 {
 	verbose("%d, %s", dirfd, pathname);
-	return fstatat(dirfd, pathname, buf, flags);
+	if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+		fprintf(stderr, "bionic_fstatat: dirfd=%d path=%s\n", dirfd, pathname);
+	}
+	char *translated = libc_bio_translate_path(pathname);
+	int ret = fstatat(dirfd, translated ? translated : pathname, buf, flags);
+	free(translated);
+	return ret;
 }
 
 static void

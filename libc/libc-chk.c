@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <limits.h>
 
+#include "libc-bio-paths.h"
+
 /* musl needs these, glibc implements them (and probably did even before bionic) */
 #ifndef __GLIBC__
 
@@ -77,12 +79,6 @@ ssize_t bionic___read_chk(int fd, void *buf, size_t count, size_t buf_size)
 	return read(fd, buf, count);
 }
 
-int bionic___open_2(const char *pathname, int flags)
-{
-	flags |= O_LARGEFILE;
-	return open(pathname, flags, 0);
-}
-
 void *bionic___memset_chk(void *dest, int c, size_t n, size_t dest_len)
 {
 	return memset(dest, c, n);
@@ -101,6 +97,24 @@ char * bionic___stpncpy_chk(char* __restrict dest, const char* __restrict src, s
 }
 
 #endif
+
+/* Fortified open variants are used by C++ code built with _FORTIFY_SOURCE.
+ * They still need the same Android-path translation as bionic_open. */
+int bionic___open_2(const char *pathname, int flags)
+{
+	char *translated = libc_bio_translate_path(pathname);
+	int fd = open(translated ? translated : pathname, flags | O_LARGEFILE, 0);
+	free(translated);
+	return fd;
+}
+
+int bionic___openat_2(int dirfd, const char *pathname, int flags)
+{
+	char *translated = libc_bio_translate_path(pathname);
+	int fd = openat(dirfd, translated ? translated : pathname, flags | O_LARGEFILE, 0);
+	free(translated);
+	return fd;
+}
 
 /* these exist in glibc, but have incompatible ABI */
 

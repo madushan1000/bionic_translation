@@ -113,7 +113,10 @@ int bionic_fseeko(FILE *stream, off_t offset, int whence)
 
 int bionic_stat64(const char *filename, struct stat *buf)
 {
-	return stat(filename, buf);
+	char *translated = libc_bio_translate_path(filename);
+	int ret = stat(translated ? translated : filename, buf);
+	free(translated);
+	return ret;
 }
 
 int bionic_fstat64(int filedes, struct stat *buf)
@@ -123,7 +126,10 @@ int bionic_fstat64(int filedes, struct stat *buf)
 
 int bionic_lstat64(const char *filename, struct stat *buf)
 {
-	return lstat(filename, buf);
+	char *translated = libc_bio_translate_path(filename);
+	int ret = lstat(translated ? translated : filename, buf);
+	free(translated);
+	return ret;
 }
 
 int bionic_statfs64(const char *file, struct statfs *buf)

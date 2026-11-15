@@ -1,11 +1,15 @@
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#include "libc-bio-paths.h"
 
 #define OPEN_NEEDS_MODE(flags) ((flags & O_CREAT) || (flags & O_TMPFILE))
 
@@ -115,4 +119,85 @@ FILE *bionic_fopen(char *path, const char *restrict mode)
 	if(free_path)
 		free(path);
 	return file;
+}
+
+char *libc_bio_translate_path(const char *path)
+{
+	char *candidate = (char *)path;
+	if ((*apply_path_overrides_func)(&candidate)) {
+		if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+			fprintf(stderr, "libc_bio: %s -> %s\n", path, candidate);
+		}
+		return candidate;
+	}
+	return NULL;
+}
+
+DIR *bionic_opendir(const char *path)
+{
+	if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+		fprintf(stderr, "bionic_opendir: %s\n", path);
+	}
+	char *translated = libc_bio_translate_path(path);
+	DIR *dir = opendir(translated ? translated : path);
+	free(translated);
+	return dir;
+}
+
+int bionic_access(const char *path, int mode)
+{
+	if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+		fprintf(stderr, "bionic_access: %s\n", path);
+	}
+	char *translated = libc_bio_translate_path(path);
+	int result = access(translated ? translated : path, mode);
+	free(translated);
+	return result;
+}
+
+int bionic_fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags)
+{
+	char *translated = libc_bio_translate_path(path);
+	int ret = fstatat64(dirfd, translated ? translated : path, buf, flags);
+	free(translated);
+	return ret;
+}
+
+int bionic_faccessat(int dirfd, const char *path, int mode, int flags)
+{
+	char *translated = libc_bio_translate_path(path);
+	int ret = faccessat(dirfd, translated ? translated : path, mode, flags);
+	free(translated);
+	return ret;
+}
+
+char *bionic_realpath(const char *path, char *resolved)
+{
+	char *translated = libc_bio_translate_path(path);
+	char *ret = realpath(translated ? translated : path, resolved);
+	free(translated);
+	return ret;
+}
+
+int bionic_openat(int dirfd, const char *path, int oflag, ...)
+{
+	if (getenv("DROIDLET_LOG_PATH_OVERRIDES")) {
+		fprintf(stderr, "bionic_openat: dirfd=%d path=%s\n", dirfd, path);
+	}
+	char *translated = libc_bio_translate_path(path);
+	const char *resolved = translated ? translated : path;
+	int fd;
+
+	if (OPEN_NEEDS_MODE(oflag)) {
+		va_list arg;
+		va_start(arg, oflag);
+		int mode = va_arg(arg, int);
+		va_end(arg);
+		fd = openat(dirfd, resolved, oflag, mode);
+	} else {
+		fd = openat(dirfd, resolved, oflag);
+	}
+
+	free(translated);
+	return fd;
 }
