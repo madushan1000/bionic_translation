@@ -9,9 +9,36 @@
 
 #define OPEN_NEEDS_MODE(flags) ((flags & O_CREAT) || (flags & O_TMPFILE))
 
-/* nop */
+/*
+ * droidlet runs from an install tree, not from /system.  Bionic libraries
+ * (Gecko, Flutter/Skia, fontconfig) still open hardcoded /system paths for
+ * fonts and configuration.  Redirect them to $ANDROID_ROOT when that points
+ * anywhere other than /system.
+ */
 static bool apply_path_overrides(char **path) {
-	return false;
+	const char *root = getenv("ANDROID_ROOT");
+	const char *requested = path ? *path : NULL;
+	if (!root || !*root || !strcmp(root, "/system") || !requested) {
+		return false;
+	}
+	if (strncmp(requested, "/system", 7) != 0) {
+		return false;
+	}
+	if (requested[7] != '\0' && requested[7] != '/') {
+		return false;
+	}
+
+	const char *tail = requested + 7; /* "" or "/..." */
+	const size_t root_len = strlen(root);
+	const size_t tail_len = strlen(tail);
+	char *replacement = (char *)malloc(root_len + tail_len + 1);
+	if (!replacement) {
+		return false;
+	}
+	memcpy(replacement, root, root_len);
+	memcpy(replacement + root_len, tail, tail_len + 1);
+	*path = replacement;
+	return true;
 }
 
 typedef bool (apply_path_overrides_func_type)(char **);
